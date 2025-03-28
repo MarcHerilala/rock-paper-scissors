@@ -22,21 +22,26 @@ async function setupDetector(): Promise<faceLandmarksDetection.FaceLandmarksDete
 }
 
 // 🟢 Fonction pour configurer la vidéo
-async function setupVideo(): Promise<HTMLVideoElement> {
-    const video = document.getElementById('video') as HTMLVideoElement;
-    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+// Fonction pour configurer la vidéo
+async function setupVideo(setLogs: (log: string) => void): Promise<HTMLVideoElement> {
+  setLogs("🔄 Demande d'accès à la caméra...");
+  const video = document.getElementById("video") as HTMLVideoElement;
+  const stream = await navigator.mediaDevices.getUserMedia({ video: true });
 
-    video.srcObject = stream;
-    await new Promise<void>((resolve) => {
-        video.onloadedmetadata = () => resolve();
-    });
+  setLogs("✅ Caméra activée !");
+  video.srcObject = stream;
+  await new Promise<void>((resolve) => {
+    video.onloadedmetadata = () => resolve();
+  });
 
-    video.play();
-    video.width = video.videoWidth;
-    video.height = video.videoHeight;
+  video.play();
+  video.width = video.videoWidth;
+  video.height = video.videoHeight;
 
-    return video;
+  setLogs(`🎥 Vidéo prête (width: ${video.width}, height: ${video.height})`);
+  return video;
 }
+
 
 // 🟢 Fonction pour configurer le canvas
 async function setupCanvas(video: HTMLVideoElement): Promise<CanvasRenderingContext2D> {
@@ -54,6 +59,8 @@ export default function FaceLandmarksDetection() {
     const detectorRef = useRef<faceLandmarksDetection.FaceLandmarksDetector | null>(null);
     const videoRef = useRef<HTMLVideoElement | null>(null);
     const [ctx, setCtx] = useState<CanvasRenderingContext2D | null>(null);
+     const [logs, setLogs] = useState<string[]>([]);
+
 
     const contours = faceLandmarksDetection.util.getKeypointIndexByContour(
         faceLandmarksDetection.SupportedModels.MediaPipeFaceMesh
@@ -61,8 +68,10 @@ export default function FaceLandmarksDetection() {
 
     useEffect(() => {
         async function initialize() {
+
             try {
-                const video = await setupVideo();
+                 setLogs(["🚀 Initialisation en cours..."]); // Réinitialisation des logs
+                const video = await setupVideo((msg) => setLogs((prev) => [...prev, msg]));
                 videoRef.current = video;
                 const context = await setupCanvas(video);
                 setCtx(context);
@@ -110,6 +119,21 @@ export default function FaceLandmarksDetection() {
                 id="video"
                 playsInline
             />
+                {/* Section affichage des logs */}
+        <pre
+          style={{
+            marginTop: "1rem",
+            background: "#222",
+            color: "#0f0",
+            padding: "10px",
+            borderRadius: "5px",
+            maxWidth: "85vw",
+            overflow: "auto",
+            fontSize: "0.9rem"
+          }}
+        >
+          {logs.join("\n")}
+        </pre>
         </>
     );
 }

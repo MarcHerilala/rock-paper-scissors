@@ -74,6 +74,7 @@ export default function HandPoseDetection() {
     async function initialize() {
       try {
         setLogs(["🚀 Initialisation en cours..."]); // Réinitialisation des logs
+        
 
         const video = await setupVideo((msg) => setLogs((prev) => [...prev, msg]));
         videoRef.current = video;
