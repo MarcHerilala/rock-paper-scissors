@@ -12,6 +12,7 @@ import { drawHands } from "@/lib/utils";
 import Link from "next/link";
 import { useAnimationFrame } from "@/lib/hooks/useAnimationFrame";
 import * as tfjsWasm from "@tensorflow/tfjs-backend-wasm";
+import { isHandOpen } from "./IsHAndOpen";
 
 // Charger TensorFlow WASM
 tfjsWasm.setWasmPaths("https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm");
@@ -89,19 +90,24 @@ export default function HandPoseDetection() {
     initialize();
   }, []);
 
-  useAnimationFrame(async () => {
-    if (!detectorRef.current || !videoRef.current || !ctx) return;
+ useAnimationFrame(async () => {
+  if (!detectorRef.current || !videoRef.current || !ctx) return;
 
-    setLogs((prev) => [...prev, "📸 Détection en cours..."]);
-    const hands = await detectorRef.current.estimateHands(videoRef.current, {
-      flipHorizontal: false
-    });
+  const hands = await detectorRef.current.estimateHands(videoRef.current, { flipHorizontal: false });
+  ctx.clearRect(0, 0, videoRef.current.videoWidth, videoRef.current.videoHeight);
+  ctx.drawImage(videoRef.current, 0, 0, videoRef.current.videoWidth, videoRef.current.videoHeight);
+  drawHands(hands, ctx);
 
-    setLogs((prev) => [...prev, `🖐️ Mains détectées: ${hands.length}`]);
-    ctx.clearRect(0, 0, videoRef.current.videoWidth, videoRef.current.videoHeight);
-    ctx.drawImage(videoRef.current, 0, 0, videoRef.current.videoWidth, videoRef.current.videoHeight);
-    drawHands(hands, ctx);
-  }, !!(detectorRef.current && videoRef.current && ctx));
+  hands.forEach((hand) => {
+    if (isHandOpen(hand)) {
+      setLogs((prev) => [...prev, "🖐️ Main ouverte détectée !"]);
+      console.log("🖐️ Main ouverte détectée !");
+    } else {
+      console.log("✊ Poing détecté !");
+      setLogs((prev) => [...prev, "✊ Poing détecté !"]);
+    }
+  });
+}, !!(detectorRef.current && videoRef.current && ctx));
 
   return (
     <div className={styles.container}>
