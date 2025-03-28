@@ -1,56 +1,57 @@
-import { useEffect, useRef, useState } from 'react';
-import { useAnimationFrame } from '../lib/hooks/useAnimationFrame';
-import '@tensorflow/tfjs-backend-webgl';
-import * as tfjsWasm from '@tensorflow/tfjs-backend-wasm';
-import { drawFaces } from '../lib/utils';
-import * as faceLandmarksDetection from '@tensorflow-models/face-landmarks-detection';
-import * as faceMesh from '@mediapipe/face_mesh';
+import { useEffect, useRef, useState } from "react";
+import { useAnimationFrame } from "../lib/hooks/useAnimationFrame";
+import "@tensorflow/tfjs-backend-webgl";
+import * as tfjsWasm from "@tensorflow/tfjs-backend-wasm";
+import { drawFaces } from "../lib/utils";
+import * as faceLandmarksDetection from "@tensorflow-models/face-landmarks-detection";
+import * as faceMesh from "@mediapipe/face_mesh";
 
-tfjsWasm.setWasmPaths('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm');
+tfjsWasm.setWasmPaths("https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm");
 
 // 🟢 Fonction pour configurer le détecteur de visages
 async function setupDetector(): Promise<faceLandmarksDetection.FaceLandmarksDetector> {
     const model = faceLandmarksDetection.SupportedModels.MediaPipeFaceMesh;
-    const detector = await faceLandmarksDetection.createDetector(model, {
-        runtime: 'mediapipe',
+    return faceLandmarksDetection.createDetector(model, {
+        runtime: "mediapipe",
         solutionPath: `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@${faceMesh.VERSION}`,
         maxFaces: 2,
-        refineLandmarks: true
+        refineLandmarks: true,
     });
-
-    return detector;
 }
 
 // 🟢 Fonction pour configurer la vidéo
-// Fonction pour configurer la vidéo
 async function setupVideo(setLogs: (log: string) => void): Promise<HTMLVideoElement> {
-  setLogs("🔄 Demande d'accès à la caméra...");
-  const video = document.getElementById("video") as HTMLVideoElement;
-  const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    setLogs("🔄 Demande d'accès à la caméra...");
+    
+    const video = document.createElement("video");
+    video.setAttribute("id", "video");
+    video.setAttribute("playsInline", "true");
 
-  setLogs("✅ Caméra activée !");
-  video.srcObject = stream;
-  await new Promise<void>((resolve) => {
-    video.onloadedmetadata = () => resolve();
-  });
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
 
-  video.play();
-  video.width = video.videoWidth;
-  video.height = video.videoHeight;
+    setLogs("✅ Caméra activée !");
+    video.srcObject = stream;
 
-  setLogs(`🎥 Vidéo prête (width: ${video.width}, height: ${video.height})`);
-  return video;
+    await new Promise<void>((resolve) => {
+        video.onloadedmetadata = () => resolve();
+    });
+
+    video.play();
+    setLogs(`🎥 Vidéo prête (width: ${video.videoWidth}, height: ${video.videoHeight})`);
+    
+    return video;
 }
 
-
 // 🟢 Fonction pour configurer le canvas
-async function setupCanvas(video: HTMLVideoElement): Promise<CanvasRenderingContext2D> {
-    const canvas = document.getElementById('canvas') as HTMLCanvasElement;
-    const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
+async function setupCanvas(video: HTMLVideoElement, setLogs: (log: string) => void): Promise<CanvasRenderingContext2D> {
+    setLogs("🎨 Configuration du canvas...");
+    const canvas = document.getElementById("canvas") as HTMLCanvasElement;
+    const ctx = canvas.getContext("2d") as CanvasRenderingContext2D;
 
-    canvas.width = video.width;
-    canvas.height = video.height;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
 
+    setLogs("✅ Canvas prêt !");
     return ctx;
 }
 
@@ -59,8 +60,7 @@ export default function FaceLandmarksDetection() {
     const detectorRef = useRef<faceLandmarksDetection.FaceLandmarksDetector | null>(null);
     const videoRef = useRef<HTMLVideoElement | null>(null);
     const [ctx, setCtx] = useState<CanvasRenderingContext2D | null>(null);
-     const [logs, setLogs] = useState<string[]>([]);
-
+    const [logs, setLogs] = useState<string[]>([]);
 
     const contours = faceLandmarksDetection.util.getKeypointIndexByContour(
         faceLandmarksDetection.SupportedModels.MediaPipeFaceMesh
@@ -68,16 +68,20 @@ export default function FaceLandmarksDetection() {
 
     useEffect(() => {
         async function initialize() {
-
             try {
-                 setLogs(["🚀 Initialisation en cours..."]); // Réinitialisation des logs
+                setLogs(["🚀 Initialisation en cours..."]);
+
                 const video = await setupVideo((msg) => setLogs((prev) => [...prev, msg]));
+                document.body.appendChild(video); // Ajout au DOM
                 videoRef.current = video;
-                const context = await setupCanvas(video);
+
+                const context = await setupCanvas(video, (msg) => setLogs((prev) => [...prev, msg]));
                 setCtx(context);
+
                 detectorRef.current = await setupDetector();
+                setLogs((prev) => [...prev, "✅ Détecteur de visages prêt !"]);
             } catch (error) {
-                console.error("Erreur lors de l'initialisation :", error);
+                setLogs((prev) => [...prev, `❌ Erreur: ${error instanceof Error ? error.message : "Erreur inconnue"}`]);
             }
         }
 
@@ -87,7 +91,7 @@ export default function FaceLandmarksDetection() {
     useAnimationFrame(async () => {
         if (!detectorRef.current || !videoRef.current || !ctx) return;
 
-        const faces = await detectorRef.current.estimateFaces(videoRef.current);
+        const faces = await detectorRef.current.estimateFaces(videoRef.current, { flipHorizontal: false });
 
         ctx.clearRect(0, 0, videoRef.current.videoWidth, videoRef.current.videoHeight);
         ctx.drawImage(videoRef.current, 0, 0, videoRef.current.videoWidth, videoRef.current.videoHeight);
@@ -95,45 +99,33 @@ export default function FaceLandmarksDetection() {
     }, !!(detectorRef.current && videoRef.current && ctx));
 
     return (
-        <>
+        <div style={{ textAlign: "center" }}>
             <canvas
                 style={{
                     transform: "scaleX(-1)",
                     zIndex: 1,
                     borderRadius: "1rem",
                     boxShadow: "0 3px 10px rgb(0 0 0)",
-                    maxWidth: "85vw"
+                    maxWidth: "85vw",
                 }}
                 id="canvas"
             />
-            <video
+            {/* 🔹 Section affichage des logs */}
+            <pre
                 style={{
-                    visibility: "visible",
-                    transform: "scaleX(-1)",
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    width: 0,
-                    height: 0
+                    marginTop: "1rem",
+                    background: "#222",
+                    color: "#0f0",
+                    padding: "10px",
+                    borderRadius: "5px",
+                    maxWidth: "85vw",
+                    overflow: "auto",
+                    fontSize: "0.9rem",
+                    textAlign: "left",
                 }}
-                id="video"
-                playsInline
-            />
-                {/* Section affichage des logs */}
-        <pre
-          style={{
-            marginTop: "1rem",
-            background: "#222",
-            color: "#0f0",
-            padding: "10px",
-            borderRadius: "5px",
-            maxWidth: "85vw",
-            overflow: "auto",
-            fontSize: "0.9rem"
-          }}
-        >
-          {logs.join("\n")}
-        </pre>
-        </>
+            >
+                {logs.join("\n")}
+            </pre>
+        </div>
     );
 }
