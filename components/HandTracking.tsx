@@ -1,3 +1,5 @@
+"use client"; // Important pour Next.js 15
+
 import styles from "/styles/Home.module.css";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -15,10 +17,12 @@ import * as tfjsWasm from "@tensorflow/tfjs-backend-wasm";
 tfjsWasm.setWasmPaths("https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm");
 
 // Fonction pour configurer la vidéo
-async function setupVideo(): Promise<HTMLVideoElement> {
+async function setupVideo(setLogs: (log: string) => void): Promise<HTMLVideoElement> {
+  setLogs("🔄 Demande d'accès à la caméra...");
   const video = document.getElementById("video") as HTMLVideoElement;
   const stream = await navigator.mediaDevices.getUserMedia({ video: true });
 
+  setLogs("✅ Caméra activée !");
   video.srcObject = stream;
   await new Promise<void>((resolve) => {
     video.onloadedmetadata = () => resolve();
@@ -28,11 +32,13 @@ async function setupVideo(): Promise<HTMLVideoElement> {
   video.width = video.videoWidth;
   video.height = video.videoHeight;
 
+  setLogs(`🎥 Vidéo prête (width: ${video.width}, height: ${video.height})`);
   return video;
 }
 
 // Fonction pour configurer le détecteur de main
-async function setupDetector(): Promise<HandDetector> {
+async function setupDetector(setLogs: (log: string) => void): Promise<HandDetector> {
+  setLogs("🔄 Initialisation du détecteur...");
   const model = SupportedModels.MediaPipeHands;
   const detector = await createDetector(model, {
     runtime: "mediapipe",
@@ -40,17 +46,20 @@ async function setupDetector(): Promise<HandDetector> {
     solutionPath: "https://cdn.jsdelivr.net/npm/@mediapipe/hands"
   });
 
+  setLogs("✅ Détecteur prêt !");
   return detector;
 }
 
 // Fonction pour configurer le canvas
-async function setupCanvas(video: HTMLVideoElement): Promise<CanvasRenderingContext2D> {
+async function setupCanvas(video: HTMLVideoElement, setLogs: (log: string) => void): Promise<CanvasRenderingContext2D> {
+  setLogs("🎨 Configuration du canvas...");
   const canvas = document.getElementById("canvas") as HTMLCanvasElement;
   const ctx = canvas.getContext("2d") as CanvasRenderingContext2D;
 
   canvas.width = video.width;
   canvas.height = video.height;
 
+  setLogs("✅ Canvas prêt !");
   return ctx;
 }
 
@@ -58,17 +67,22 @@ export default function HandPoseDetection() {
   const detectorRef = useRef<HandDetector | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [ctx, setCtx] = useState<CanvasRenderingContext2D | null>(null);
+  const [logs, setLogs] = useState<string[]>([]);
 
   useEffect(() => {
     async function initialize() {
       try {
-        const video = await setupVideo();
+        setLogs(["🚀 Initialisation en cours..."]); // Réinitialisation des logs
+
+        const video = await setupVideo((msg) => setLogs((prev) => [...prev, msg]));
         videoRef.current = video;
-        const context = await setupCanvas(video);
+
+        const context = await setupCanvas(video, (msg) => setLogs((prev) => [...prev, msg]));
         setCtx(context);
-        detectorRef.current = await setupDetector();
+
+        detectorRef.current = await setupDetector((msg) => setLogs((prev) => [...prev, msg]));
       } catch (error) {
-        console.error("Error initializing hand detection:", error);
+        setLogs((prev) => [...prev, `❌ Erreur: ${error.message}`]);
       }
     }
 
@@ -78,10 +92,12 @@ export default function HandPoseDetection() {
   useAnimationFrame(async () => {
     if (!detectorRef.current || !videoRef.current || !ctx) return;
 
+    setLogs((prev) => [...prev, "📸 Détection en cours..."]);
     const hands = await detectorRef.current.estimateHands(videoRef.current, {
       flipHorizontal: false
     });
 
+    setLogs((prev) => [...prev, `🖐️ Mains détectées: ${hands.length}`]);
     ctx.clearRect(0, 0, videoRef.current.videoWidth, videoRef.current.videoHeight);
     ctx.drawImage(videoRef.current, 0, 0, videoRef.current.videoWidth, videoRef.current.videoHeight);
     drawHands(hands, ctx);
@@ -109,7 +125,7 @@ export default function HandPoseDetection() {
         ></canvas>
         <video
           style={{
-            visibility: "visible",
+            visibility: "hidden",
             transform: "scaleX(-1)",
             position: "absolute",
             top: 0,
@@ -120,7 +136,24 @@ export default function HandPoseDetection() {
           id="video"
           playsInline
         ></video>
+
+        {/* Section affichage des logs */}
+        <pre
+          style={{
+            marginTop: "1rem",
+            background: "#222",
+            color: "#0f0",
+            padding: "10px",
+            borderRadius: "5px",
+            maxWidth: "85vw",
+            overflow: "auto",
+            fontSize: "0.9rem"
+          }}
+        >
+          {logs.join("\n")}
+        </pre>
       </main>
     </div>
   );
 }
+
