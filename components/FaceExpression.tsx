@@ -34,7 +34,7 @@ export function detectExpression(
     const mouthAspectRatio: number = mouthWidth / mouthHeight; // Plus grand si la bouche est étirée horizontalement
 
     // Seuils ajustés
-    const isSmiling: boolean = smileRatio > 0.4 && mouthAspectRatio > 2.0;
+    const isSmiling: boolean = smileRatio > 0.9 && mouthAspectRatio > 3.0;
 
     // 🔥 Ajout des logs d'expression
     if (isSmiling) setLogs("😁 La personne sourit beaucoup !");
