@@ -5,6 +5,7 @@ import * as tfjsWasm from "@tensorflow/tfjs-backend-wasm";
 import { drawFaces } from "../lib/utils";
 import * as faceLandmarksDetection from "@tensorflow-models/face-landmarks-detection";
 import * as faceMesh from "@mediapipe/face_mesh";
+import {detectExpression} from "./FaceExpression"
 
 tfjsWasm.setWasmPaths("https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm");
 
@@ -96,6 +97,7 @@ export default function FaceLandmarksDetection() {
         ctx.clearRect(0, 0, videoRef.current.videoWidth, videoRef.current.videoHeight);
         ctx.drawImage(videoRef.current, 0, 0, videoRef.current.videoWidth, videoRef.current.videoHeight);
         drawFaces(faces, ctx, contours);
+         detectExpression(faces, (msg) => setLogs((prev) => [...prev, msg]))
     }, !!(detectorRef.current && videoRef.current && ctx));
 
     return (
