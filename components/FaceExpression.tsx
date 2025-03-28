@@ -1,4 +1,3 @@
-
 import * as faceLandmarksDetection from "@tensorflow-models/face-landmarks-detection";
 
 export function detectExpression(
@@ -10,16 +9,17 @@ export function detectExpression(
     const keypoints: faceLandmarksDetection.Keypoint[] = faces[0].keypoints;
 
     // Points de la bouche
-    const mouth: faceLandmarksDetection.Keypoint[] = keypoints.slice(61, 291);
+    const mouthLeft = keypoints[61]; // Coin gauche
+    const mouthRight = keypoints[291]; // Coin droit
+    const upperLip = keypoints[13]; // Centre lèvre sup
+    const lowerLip = keypoints[14]; // Centre lèvre inf
 
     // Points des yeux
-    const leftEye: faceLandmarksDetection.Keypoint[] = keypoints.slice(133, 144);
-    const rightEye: faceLandmarksDetection.Keypoint[] = keypoints.slice(362, 374);
+    const leftEyeInner = keypoints[133]; // Intérieur œil gauche
+    const rightEyeInner = keypoints[362]; // Intérieur œil droit
 
-    // Points de référence pour la direction du regard
+    // Centre du visage (repère pour le regard)
     const noseTip = keypoints[1]; // Pointe du nez
-    const leftPupil = leftEye[4]; // Point approximatif de la pupille gauche
-    const rightPupil = rightEye[4]; // Point approximatif de la pupille droite
 
     // Largeur du visage (distance entre les tempes)
     const faceWidth: number = Math.hypot(
@@ -27,28 +27,35 @@ export function detectExpression(
         keypoints[234].y - keypoints[454].y
     );
 
-    // Détection du sourire
-    const mouthWidth: number = Math.hypot(mouth[6].x - mouth[0].x, mouth[6].y - mouth[0].y);
-    const mouthHeight: number = Math.hypot(mouth[13].x - mouth[14].x, mouth[13].y - mouth[14].y);
-    const smileRatio: number = mouthWidth / faceWidth;
-    const mouthAspectRatio: number = mouthWidth / mouthHeight;
+    // 🔵 Détection du sourire
+    const mouthWidth: number = Math.hypot(
+        mouthRight.x - mouthLeft.x, 
+        mouthRight.y - mouthLeft.y
+    );
 
-    const isSmiling: boolean = smileRatio > 0.9 && mouthAspectRatio > 3.0;
+    const mouthHeight: number = Math.hypot(
+        upperLip.x - lowerLip.x, 
+        upperLip.y - lowerLip.y
+    );
 
-    // Détection du regard détourné
-    const noseToLeftPupil = Math.abs(noseTip.x - leftPupil.x);
-    const noseToRightPupil = Math.abs(noseTip.x - rightPupil.x);
+    const smileRatio: number = mouthWidth / faceWidth; // Largeur de la bouche par rapport au visage
+    const mouthAspectRatio: number = mouthWidth / mouthHeight; // Largeur/Hauteur (bouche étirée ou pas)
 
-    // Seuils pour considérer que la personne regarde ailleurs
-    const lookAwayThreshold = faceWidth * 0.15; // Ajustable en fonction de la sensibilité désirée
-    const isLookingAway: boolean = noseToLeftPupil > lookAwayThreshold || noseToRightPupil > lookAwayThreshold;
+    const isSmiling: boolean = smileRatio > 0.4 && mouthAspectRatio > 1.8; // Seuils corrigés
 
-    // 🔥 Logs combinés
-    if (!isLookingAway) {
-        setLogs("👀 La personne semble regarder ailleurs pendant qu'elle parle !");
+    // 🔵 Détection du regard détourné
+    const eyeMidpointX = (leftEyeInner.x + rightEyeInner.x) / 2; // Centre des yeux
+    const deviationX = Math.abs(noseTip.x - eyeMidpointX); // Distance nez - yeux
+
+    const lookAwayThreshold = faceWidth * 0.1; // Ajusté à 10% de la largeur du visage
+    const isLookingAway: boolean = deviationX > lookAwayThreshold; // Vrai si le regard s'écarte trop
+
+    // 🔥 Logs améliorés
+    if (isLookingAway) {
+        setLogs("👀 La personne regarde ailleurs.");
     } else if (isSmiling) {
-        setLogs("😁 La personne sourit beaucoup !");
+        setLogs("😁 La personne sourit !");
     } else {
-        setLogs("😐 Pas de sourire et regard neutre.");
+        setLogs("😐 Pas de sourire, regard neutre.");
     }
 }
