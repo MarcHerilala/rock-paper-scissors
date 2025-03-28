@@ -82,7 +82,7 @@ export default function HandPoseDetection() {
 
         detectorRef.current = await setupDetector((msg) => setLogs((prev) => [...prev, msg]));
       } catch (error) {
-        setLogs((prev) => [...prev, `❌ Erreur: ${error.message}`]);
+        setLogs((prev) => [...prev, `❌ Erreur: ${error instanceof Error ? error.message : "Une erreur inconnue s'est produite"}`]);
       }
     }
 
