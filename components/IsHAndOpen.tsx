@@ -4,11 +4,28 @@ import { Hand ,Keypoint} from "@tensorflow-models/hand-pose-detection";
 export function isHandOpen(hand: Hand): boolean {
   if (!hand.keypoints) return false;
 
-  const fingers = ["index_finger_tip", "middle_finger_tip", "ring_finger_tip", "pinky_finger_tip"];
-  const palmY = hand.keypoints[0].y; // Position du poignet
+  // Liste des doigts et leurs points clés
+  const fingers = [
+    { tip: "index_finger_tip", pip: "index_finger_pip" },
+    { tip: "middle_finger_tip", pip: "middle_finger_pip" },
+    { tip: "ring_finger_tip", pip: "ring_finger_pip" },
+    { tip: "pinky_finger_tip", pip: "pinky_finger_pip" }
+  ];
 
-  return fingers.every((fingerName) => {
-    const fingerTip = hand.keypoints.find((pt: Keypoint) => pt.name === fingerName);
-    return fingerTip && fingerTip.y < palmY;
+  let openFingers = 0;
+
+  fingers.forEach(({ tip, pip }) => {
+    const fingerTip = hand.keypoints.find((pt: Keypoint) => pt.name === tip);
+    const fingerPip = hand.keypoints.find((pt: Keypoint) => pt.name === pip);
+
+    if (fingerTip && fingerPip) {
+      if (fingerTip.y < fingerPip.y) {
+        openFingers++; // Doigt ouvert
+      }
+    }
   });
+
+  // Si au moins 3 doigts sont ouverts, on considère que la main est ouverte
+  return openFingers >= 3;
 }
+
