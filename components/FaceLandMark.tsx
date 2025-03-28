@@ -99,7 +99,7 @@ export default function FaceLandmarksDetection() {
             />
             <video
                 style={{
-                    visibility: "hidden",
+                    visibility: "visible",
                     transform: "scaleX(-1)",
                     position: "absolute",
                     top: 0,
