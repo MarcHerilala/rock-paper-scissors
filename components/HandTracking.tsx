@@ -1,7 +1,6 @@
 "use client";
 
-import styles from "/styles/Home.module.css";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import {
   createDetector,
   SupportedModels,
@@ -12,156 +11,270 @@ import { drawHands } from "@/lib/utils";
 import Link from "next/link";
 import { useAnimationFrame } from "@/lib/hooks/useAnimationFrame";
 import * as tfjsWasm from "@tensorflow/tfjs-backend-wasm";
-import { detectGesture, Gesture } from "@/lib/gestures";
+import { detectGesture, GestureType, GESTURE_ICONS } from "@/lib/gestures";
 
-// Charger TensorFlow WASM
-tfjsWasm.setWasmPaths("https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm");
+// Config & Constants
+const GAME_CONFIG = {
+  COUNTDOWN_START: 3,
+  AI_DECISION_DELAY_MS: 500,
+  LOGS_HISTORY_SIZE: 3,
+  TFJS_WASM_PATH: "https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm",
+  MEDIAPIPE_SOLUTION_PATH: "https://cdn.jsdelivr.net/npm/@mediapipe/hands",
+};
 
-// Fonction pour configurer la vidéo
-async function setupVideo(setLogs: (log: string) => void): Promise<HTMLVideoElement> {
-  setLogs("🔄 Demande d'accès à la caméra...");
-  const video = document.getElementById("video") as HTMLVideoElement;
-  const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-
-  setLogs("✅ Caméra activée !");
-  video.srcObject = stream;
-  await new Promise<void>((resolve) => {
-    video.onloadedmetadata = () => resolve();
-  });
-
-  video.play();
-  video.width = video.videoWidth;
-  video.height = video.videoHeight;
-
-  setLogs(`🎥 Vidéo prête (width: ${video.width}, height: ${video.height})`);
-  return video;
+enum GameState {
+  IDLE = "IDLE",
+  COUNTDOWN = "COUNTDOWN",
+  AI_CHOOSING = "AI_CHOOSING",
+  RESULT = "RESULT",
 }
 
-// Fonction pour configurer le détecteur de main
-async function setupDetector(setLogs: (log: string) => void): Promise<HandDetector> {
-  setLogs("🔄 Initialisation du détecteur...");
-  const model = SupportedModels.MediaPipeHands;
-  const detector = await createDetector(model, {
-    runtime: "mediapipe",
-    maxHands: 2,
-    solutionPath: "https://cdn.jsdelivr.net/npm/@mediapipe/hands"
-  });
-
-  setLogs("✅ Détecteur prêt !");
-  return detector;
+enum GameResult {
+  WIN = "WIN",
+  LOSS = "LOSS",
+  DRAW = "DRAW",
 }
 
-// Fonction pour configurer le canvas
-async function setupCanvas(video: HTMLVideoElement, setLogs: (log: string) => void): Promise<CanvasRenderingContext2D> {
-  setLogs("🎨 Configuration du canvas...");
-  const canvas = document.getElementById("canvas") as HTMLCanvasElement;
-  const ctx = canvas.getContext("2d") as CanvasRenderingContext2D;
+// Map TFJS Wasm
+tfjsWasm.setWasmPaths(GAME_CONFIG.TFJS_WASM_PATH);
 
-  canvas.width = video.width;
-  canvas.height = video.height;
+// Pure helpers
+const getAISelection = (): GestureType => {
+  const choices = [GestureType.ROCK, GestureType.PAPER, GestureType.SCISSORS];
+  return choices[Math.floor(Math.random() * choices.length)];
+};
 
-  setLogs("✅ Canvas prêt !");
-  return ctx;
-}
+const determineResult = (player: GestureType, ai: GestureType): GameResult => {
+  if (player === ai) return GameResult.DRAW;
+  const outcomes: Record<GestureType, GestureType> = {
+    [GestureType.ROCK]: GestureType.SCISSORS,
+    [GestureType.PAPER]: GestureType.ROCK,
+    [GestureType.SCISSORS]: GestureType.PAPER,
+    [GestureType.UNKNOWN]: GestureType.UNKNOWN,
+  };
+  return outcomes[player] === ai ? GameResult.WIN : GameResult.LOSS;
+};
 
-export default function HandPoseDetection() {
+export default function RockPaperScissorsGame() {
+  // Refs
   const detectorRef = useRef<HandDetector | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [ctx, setCtx] = useState<CanvasRenderingContext2D | null>(null);
-  const [logs, setLogs] = useState<string[]>([]);
-  const [currentGesture, setCurrentGesture] = useState<Gesture>("Unknown");
+  const lastGestureRef = useRef<GestureType>(GestureType.UNKNOWN);
 
+  // States
+  const [gameState, setGameState] = useState<GameState>(GameState.IDLE);
+  const [currentGesture, setCurrentGesture] = useState<GestureType>(GestureType.UNKNOWN);
+  const [aiChoice, setAiChoice] = useState<GestureType>(GestureType.UNKNOWN);
+  const [scores, setScores] = useState({ player: 0, ai: 0 });
+  const [countdown, setCountdown] = useState(GAME_CONFIG.COUNTDOWN_START);
+  const [gameResult, setGameResult] = useState<GameResult | null>(null);
+  const [logs, setLogs] = useState<string[]>([]);
+
+  // System status for logging
+  const addLog = (msg: string) => setLogs(p => [msg, ...p.slice(0, GAME_CONFIG.LOGS_HISTORY_SIZE - 1)]);
+
+  // ML Initialization
   useEffect(() => {
-    async function initialize() {
+    let active = true;
+    async function init() {
       try {
-        setLogs(["🚀 Initialisation en cours..."]);
-        const video = await setupVideo((msg) => setLogs((prev) => [...prev, msg]));
+        addLog("🚀 Initialisation...");
+        const video = document.getElementById("video") as HTMLVideoElement;
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        if (!active) return;
+
+        video.srcObject = stream;
+        await new Promise<void>(res => (video.onloadedmetadata = () => res()));
+        video.play();
+        video.width = video.videoWidth;
+        video.height = video.videoHeight;
         videoRef.current = video;
-        const context = await setupCanvas(video, (msg) => setLogs((prev) => [...prev, msg]));
+
+        const canvas = document.getElementById("canvas") as HTMLCanvasElement;
+        const context = canvas.getContext("2d") as CanvasRenderingContext2D;
+        canvas.width = video.width;
+        canvas.height = video.height;
+        if (!active) return;
         setCtx(context);
-        detectorRef.current = await setupDetector((msg) => setLogs((prev) => [...prev, msg]));
-      } catch (error) {
-        setLogs((prev) => [...prev, `❌ Erreur: ${error instanceof Error ? error.message : "Une erreur inconnue s'est produite"}`]);
+
+        detectorRef.current = await createDetector(SupportedModels.MediaPipeHands, {
+          runtime: "mediapipe",
+          solutionPath: GAME_CONFIG.MEDIAPIPE_SOLUTION_PATH
+        });
+
+        addLog("✅ Système prêt !");
+      } catch (err) {
+        addLog(`❌ Erreur caméra/ML`);
       }
     }
-    initialize();
+    init();
+    return () => { active = false; };
   }, []);
 
+  // Frame processing
   useAnimationFrame(async () => {
     if (!detectorRef.current || !videoRef.current || !ctx) return;
 
     const hands = await detectorRef.current.estimateHands(videoRef.current, { flipHorizontal: false });
     ctx.clearRect(0, 0, videoRef.current.videoWidth, videoRef.current.videoHeight);
+
+    ctx.save();
     ctx.drawImage(videoRef.current, 0, 0, videoRef.current.videoWidth, videoRef.current.videoHeight);
     drawHands(hands, ctx);
+    ctx.restore();
 
-    if (hands.length > 0) {
-      const gesture = detectGesture(hands[0]);
-      if (gesture !== currentGesture) {
-        setCurrentGesture(gesture);
-        const icon = gesture === "Rock" ? "✊" : gesture === "Paper" ? "🖐️" : gesture === "Scissors" ? "✌️" : "❓";
-        setLogs((prev) => [`Mode: ${gesture} ${icon}`, ...prev.slice(0, 5)]);
-      }
-    } else if (currentGesture !== "Unknown") {
-      setCurrentGesture("Unknown");
-    }
+    const gesture = hands.length > 0 ? detectGesture(hands[0]) : GestureType.UNKNOWN;
+    setCurrentGesture(gesture);
+    lastGestureRef.current = gesture;
   }, !!(detectorRef.current && videoRef.current && ctx));
 
+  // Game Engine
+  const startRound = () => {
+    if (gameState !== GameState.IDLE && gameState !== GameState.RESULT) return;
+
+    setGameState(GameState.COUNTDOWN);
+    setCountdown(GAME_CONFIG.COUNTDOWN_START);
+    setGameResult(null);
+    setAiChoice(GestureType.UNKNOWN);
+
+    const interval = setInterval(() => {
+      setCountdown(c => {
+        if (c <= 1) {
+          clearInterval(interval);
+          resolveRound();
+          return 0;
+        }
+        return c - 1;
+      });
+    }, 1000);
+  };
+
+  const resolveRound = () => {
+    setGameState(GameState.AI_CHOOSING);
+    setTimeout(() => {
+      const aiSelected = getAISelection();
+      const playerSelected = lastGestureRef.current;
+      const result = determineResult(playerSelected, aiSelected);
+
+      setAiChoice(aiSelected);
+      setGameResult(result);
+
+      if (result === GameResult.WIN) setScores(s => ({ ...s, player: s.player + 1 }));
+      if (result === GameResult.LOSS) setScores(s => ({ ...s, ai: s.ai + 1 }));
+
+      setGameState(GameState.RESULT);
+    }, GAME_CONFIG.AI_DECISION_DELAY_MS);
+  };
+
+  // UI mappings
+  const resultColorClass = useMemo(() => {
+    if (!gameResult) return "text-white";
+    return {
+      [GameResult.WIN]: "text-green-400",
+      [GameResult.LOSS]: "text-red-500",
+      [GameResult.DRAW]: "text-yellow-400",
+    }[gameResult];
+  }, [gameResult]);
+
   return (
-    <div className={styles.container}>
-      <main className={styles.main}>
-        <h2 style={{ fontWeight: "normal" }}>
-          <Link style={{ fontWeight: "bold" }} href={"/"}>
-            Home
-          </Link>{" "}
-          / Hand Pose Detection 👋
-        </h2>
-        <code style={{ marginBottom: "1rem" }}>Work in progress...</code>
+    <div className="flex flex-col items-center justify-center p-4 md:p-8 space-y-8 animate-in fade-in duration-1000">
+      {/* Score Header */}
+      <header className="grid grid-cols-2 gap-4 w-full max-w-xl">
+        <ScoreCard label="Toi" score={scores.player} color="blue" />
+        <ScoreCard label="AI" score={scores.ai} color="red" />
+      </header>
 
-        {/* Affichage du geste actuel en gros */}
-        <div style={{ fontSize: "5rem", marginBottom: "1rem" }}>
-          {currentGesture === "Rock" ? "✊" : currentGesture === "Paper" ? "🖐️" : currentGesture === "Scissors" ? "✌️" : "❓"}
+      {/* Game Window */}
+      <section className="relative group overflow-hidden rounded-[4rem] border border-white/10 shadow-[0_30px_60px_rgba(0,0,0,0.6)] bg-black/20">
+        <canvas id="canvas" className="w-full max-w-2xl transform scale-x-[-1] transition-opacity duration-300" />
+        <video id="video" className="hidden" />
+
+        {/* CountDown Overlay */}
+        {gameState === GameState.COUNTDOWN && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/30 backdrop-blur-sm">
+            <span className="text-[15rem] font-black text-white italic drop-shadow-2xl animate-ping">{countdown}</span>
+          </div>
+        )}
+
+        {/* Round Result Overlay */}
+        {gameState === GameState.RESULT && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 backdrop-blur-xl p-8 animate-in zoom-in-95 duration-500">
+            <div className="flex items-end space-x-12 mb-10">
+              <PlayerChoice label="Toi" icon={GESTURE_ICONS[currentGesture]} />
+              <div className="text-4xl font-black text-white/20 mb-4">VS</div>
+              <PlayerChoice label="AI" icon={GESTURE_ICONS[aiChoice]} animate />
+            </div>
+
+            <h3 className={`text-7xl font-black mb-10 italic uppercase ${resultColorClass}`}>
+              {gameResult === GameResult.WIN ? "Gagné !" :
+                gameResult === GameResult.LOSS ? "Perdu..." : "Égalité"}
+            </h3>
+
+            <PlayButton onClick={startRound} label="REJOUER" />
+          </div>
+        )}
+
+        {/* Live Status Hint */}
+        {gameState === GameState.IDLE && (
+          <div className="absolute bottom-10 left-1/2 -translate-x-1/2 bg-white/10 backdrop-blur-2xl border border-white/10 px-8 py-3 rounded-full flex items-center space-x-4 shadow-xl">
+            <span className="text-3xl">{GESTURE_ICONS[currentGesture]}</span>
+            <span className="text-white font-bold tracking-wide">
+              {currentGesture === GestureType.UNKNOWN ? "Prêt ?" : currentGesture}
+            </span>
+          </div>
+        )}
+      </section>
+
+      {/* Main Action Call */}
+      {gameState === GameState.IDLE && (
+        <PlayButton onClick={startRound} label="Démarrer !" large />
+      )}
+
+      {/* System Monitor */}
+      <footer className="w-full max-w-xl bg-white/5 backdrop-blur-sm rounded-3xl p-6 border border-white/5 space-y-3">
+        <div className="flex items-center space-x-3">
+          <div className="w-2.5 h-2.5 rounded-full bg-blue-500 shadow-[0_0_10px_#3b82f6]"></div>
+          <p className="text-white/30 text-[10px] font-black uppercase tracking-[0.3em]">Game Intelligence Stream</p>
         </div>
-
-        <canvas
-          style={{
-            transform: "scaleX(-1)",
-            zIndex: 1,
-            borderRadius: "1rem",
-            boxShadow: "0 3px 10px rgb(0 0 0)",
-            maxWidth: "85vw"
-          }}
-          id="canvas"
-        ></canvas>
-        <video
-          style={{
-            visibility: "hidden",
-            transform: "scaleX(-1)",
-            position: "absolute",
-            top: 0,
-            left: 0,
-            width: 0,
-            height: 0
-          }}
-          id="video"
-          playsInline
-        ></video>
-
-        <pre
-          style={{
-            marginTop: "1rem",
-            background: "#222",
-            color: "#0f0",
-            padding: "10px",
-            borderRadius: "5px",
-            maxWidth: "85vw",
-            overflow: "auto",
-            fontSize: "0.9rem"
-          }}
-        >
-          {logs.join("\n")}
-        </pre>
-      </main>
+        <div className="space-y-1">
+          {logs.map((log, i) => (
+            <p key={i} className="text-white/50 font-mono text-xs flex items-center gap-2">
+              <span className="text-white/20">[{new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}]</span>
+              {log}
+            </p>
+          ))}
+        </div>
+      </footer>
     </div>
   );
 }
+
+/* Sub-components for cleaner structure */
+
+const ScoreCard = ({ label, score, color }: { label: string, score: number, color: "blue" | "red" }) => (
+  <div className="bg-white/5 backdrop-blur-2xl border border-white/10 p-8 rounded-[3rem] flex flex-col items-center shadow-inner transition-transform hover:scale-[1.02]">
+    <span className="text-white/40 text-xs font-black uppercase tracking-widest mb-2">{label}</span>
+    <span className={`text-6xl font-black ${color === "blue" ? "text-blue-400" : "text-red-500"}`}>{score}</span>
+  </div>
+);
+
+const PlayerChoice = ({ label, icon, animate }: { label: string, icon: string, animate?: boolean }) => (
+  <div className="flex flex-col items-center group">
+    <span className="text-white/40 text-[10px] font-black uppercase tracking-[0.2em] mb-3">{label}</span>
+    <span className={`text-9xl transition-transform ${animate ? 'animate-bounce' : 'group-hover:scale-110'}`}>{icon}</span>
+  </div>
+);
+
+const PlayButton = ({ onClick, label, large }: { onClick: () => void, label: string, large?: boolean }) => (
+  <button
+    onClick={onClick}
+    className={`
+      relative overflow-hidden font-black tracking-widest uppercase italic transition-all transform active:scale-95 shadow-2xl
+      ${large ? 'px-20 py-8 bg-blue-600 hover:bg-blue-500 text-3xl rounded-[2.5rem]' : 'px-14 py-4 bg-white text-black text-xl rounded-full hover:scale-110'}
+    `}
+  >
+    {label}
+    <div className="absolute inset-0 bg-gradient-to-tr from-white/20 to-transparent opacity-0 hover:opacity-100 transition-opacity" />
+  </button>
+);
