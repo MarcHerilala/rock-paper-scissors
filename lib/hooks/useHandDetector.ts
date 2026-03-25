@@ -6,6 +6,7 @@ import {
     SupportedModels,
     HandDetector
 } from "@tensorflow-models/hand-pose-detection";
+import * as tf from "@tensorflow/tfjs";
 import "@tensorflow/tfjs-backend-webgl";
 import { drawHands } from "@/lib/utils";
 import { useAnimationFrame } from "@/lib/hooks/useAnimationFrame";
@@ -49,7 +50,7 @@ export function useHandDetector() {
                 if (!video) throw new Error("Video ref not found");
 
                 const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { width: { ideal: 640 }, height: { ideal: 480 } }
+                    video: { width: { ideal: 320 }, height: { ideal: 240 } } // Low resolution for extreme speed
                 });
 
                 if (!active) {
@@ -83,8 +84,8 @@ export function useHandDetector() {
 
                 if (!active) return;
 
-                video.width = video.videoWidth || 640;
-                video.height = video.videoHeight || 480;
+                video.width = video.videoWidth || 320;
+                video.height = video.videoHeight || 240;
 
                 const canvas = canvasRef.current;
                 if (canvas) {
@@ -118,7 +119,8 @@ export function useHandDetector() {
 
                 if (!active) return;
                 setIsReady(true);
-                addLog("System: Ready.");
+                addLog(`System: Ready (${tf.getBackend()}).`);
+                console.log("TFJS Backend:", tf.getBackend());
             } catch (err: any) {
                 console.error("Initialization Error:", err);
                 addLog(`Error: ${err.message || "Initialization failed"}`);
@@ -144,9 +146,10 @@ export function useHandDetector() {
 
         ctx.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
 
-        // Run ML detection every 2 frames to save CPU/GPU (approx 30fps detection on 60fps screen)
+        // Run ML detection every 3 frames (~20fps detection on 60fps screen)
+        // This reduces CPU/GPU load significantly while remaining responsive
         frameCountRef.current++;
-        if (frameCountRef.current % 2 !== 0) return;
+        if (frameCountRef.current % 3 !== 0) return;
 
         isProcessingRef.current = true;
         try {
