@@ -120,12 +120,17 @@ export default function RockPaperScissorsGame() {
       </section>
 
       {gameState === GameState.IDLE && (
-        <PlayButton
-          onClick={handleStart}
-          label={isReady ? "Démarrer !" : "Chargement..."}
-          icon={isReady ? <Play className="w-8 h-8" /> : null}
-          large
-        />
+        <div className="flex flex-col items-center gap-4">
+          <PlayButton
+            onClick={handleStart}
+            label={isReady ? "Démarrer !" : logs[0]?.includes("❌") ? "Échec - Réessayer" : "Chargement..."}
+            icon={isReady ? <Play className="w-8 h-8" /> : logs[0]?.includes("❌") ? <RotateCcw className="w-8 h-8" /> : null}
+            large
+          />
+          {!isReady && !logs[0]?.includes("❌") && (
+            <p className="text-white/20 text-xs animate-pulse">Assurez-vous d'autoriser la caméra</p>
+          )}
+        </div>
       )}
 
       <footer className="w-full max-w-xl bg-white/5 backdrop-blur-sm rounded-3xl p-6 border border-white/5 space-y-3 text-white/50 font-mono text-xs">

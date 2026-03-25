@@ -32,20 +32,46 @@ export function useHandDetector() {
 
     useEffect(() => {
         let active = true;
-        async function init() {
-            try {
-                addLog("🔄 Initialisation caméra...");
-                const video = videoRef.current;
-                if (!video) return;
 
-                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-                if (!active) return;
+        async function init() {
+            // Wait for refs to be attached
+            if (!videoRef.current || !canvasRef.current) {
+                console.log("Waiting for refs...");
+                // We'll try again in the next effect run if dependencies change, 
+                // but since refs don't trigger re-renders, we'll use a small timeout for safety
+                const timer = setTimeout(init, 100);
+                return () => clearTimeout(timer);
+            }
+
+            try {
+                addLog("🔄 Caméra : Demande d'accès...");
+                const video = videoRef.current;
+
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: 640, height: 480 }
+                });
+
+                if (!active) {
+                    stream.getTracks().forEach(track => track.stop());
+                    return;
+                }
 
                 video.srcObject = stream;
-                await new Promise<void>(res => (video.onloadedmetadata = () => res()));
-                video.play();
-                video.width = video.videoWidth;
-                video.height = video.videoHeight;
+
+                // Wait for video to be ready
+                await new Promise<void>((resolve) => {
+                    video.onloadeddata = () => {
+                        video.play().then(resolve).catch(e => {
+                            console.error("Play error:", e);
+                            resolve(); // Resolve anyway to try continuing
+                        });
+                    };
+                });
+
+                if (!active) return;
+
+                video.width = video.videoWidth || 640;
+                video.height = video.videoHeight || 480;
 
                 const canvas = canvasRef.current;
                 if (canvas) {
@@ -53,7 +79,7 @@ export function useHandDetector() {
                     canvas.height = video.height;
                 }
 
-                addLog("🔄 Chargement du modèle...");
+                addLog("🔄 ML : Chargement du modèle...");
                 detectorRef.current = await createDetector(SupportedModels.MediaPipeHands, {
                     runtime: "mediapipe",
                     solutionPath: CONFIG.MEDIAPIPE_SOLUTION_PATH
@@ -61,11 +87,13 @@ export function useHandDetector() {
 
                 if (!active) return;
                 setIsReady(true);
-                addLog("✅ Système prêt !");
+                addLog("✅ Prêt pour le jeu !");
             } catch (err) {
-                addLog("❌ Erreur Camera/ML");
+                console.error("Init Error:", err);
+                addLog("❌ Échec initialisation");
             }
         }
+
         init();
         return () => { active = false; };
     }, []);
