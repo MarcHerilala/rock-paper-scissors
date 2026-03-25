@@ -14,7 +14,7 @@ import { detectGesture, GestureType } from "@/lib/gestures";
 
 const CONFIG = {
     TFJS_WASM_PATH: "https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm",
-    MEDIAPIPE_SOLUTION_PATH: "https://cdn.jsdelivr.net/npm/@mediapipe/hands",
+    MEDIAPIPE_SOLUTION_PATH: "https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240",
 };
 
 tfjsWasm.setWasmPaths(CONFIG.TFJS_WASM_PATH);
@@ -28,7 +28,7 @@ export function useHandDetector() {
     const [gesture, setGesture] = useState<GestureType>(GestureType.UNKNOWN);
     const [logs, setLogs] = useState<string[]>([]);
 
-    const addLog = (msg: string) => setLogs(prev => [msg, ...prev.slice(0, 2)]);
+    const addLog = (msg: string) => setLogs(prev => [msg, ...prev.slice(0, 5)]);
 
     useEffect(() => {
         let active = true;
@@ -46,9 +46,10 @@ export function useHandDetector() {
             try {
                 addLog("Camera: Requesting access...");
                 const video = videoRef.current;
+                if (!video) throw new Error("Video ref not found");
 
                 const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { width: 640, height: 480 }
+                    video: { width: { ideal: 640 }, height: { ideal: 480 } }
                 });
 
                 if (!active) {
@@ -57,15 +58,27 @@ export function useHandDetector() {
                 }
 
                 video.srcObject = stream;
+                addLog("Camera: Access granted.");
 
-                // Wait for video to be ready
-                await new Promise<void>((resolve) => {
-                    video.onloadeddata = () => {
-                        video.play().then(resolve).catch(e => {
-                            console.error("Play error:", e);
-                            resolve(); // Resolve anyway to try continuing
-                        });
+                // Wait for video to be ready - More robust check
+                addLog("Video: Initializing stream...");
+                await new Promise<void>((resolve, reject) => {
+                    const onReady = async () => {
+                        try {
+                            await video.play();
+                            addLog("Video: Stream playback started.");
+                            resolve();
+                        } catch (e: any) {
+                            reject(new Error(`Playback failed: ${e.message}`));
+                        }
                     };
+
+                    if (video.readyState >= 2) { // HAVE_CURRENT_DATA
+                        onReady();
+                    } else {
+                        video.onloadeddata = onReady;
+                        video.onerror = () => reject(new Error("Video error occurred"));
+                    }
                 });
 
                 if (!active) return;
@@ -80,17 +93,33 @@ export function useHandDetector() {
                 }
 
                 addLog("ML: Loading detection model...");
-                detectorRef.current = await createDetector(SupportedModels.MediaPipeHands, {
-                    runtime: "mediapipe",
-                    solutionPath: CONFIG.MEDIAPIPE_SOLUTION_PATH
-                });
+                try {
+                    try {
+                        addLog("ML: Trying MediaPipe runtime...");
+                        detectorRef.current = await createDetector(SupportedModels.MediaPipeHands, {
+                            runtime: "mediapipe",
+                            solutionPath: CONFIG.MEDIAPIPE_SOLUTION_PATH
+                        });
+                    } catch (mediapipeErr) {
+                        console.warn("MediaPipe runtime failed, falling back to tfjs:", mediapipeErr);
+                        addLog("ML: Falling back to TFJS runtime...");
+                        detectorRef.current = await createDetector(SupportedModels.MediaPipeHands, {
+                            runtime: "tfjs",
+                            modelType: "full"
+                        });
+                    }
+                    addLog("ML: Model loaded successfully.");
+                } catch (mlErr: any) {
+                    console.error("ML Loading Error:", mlErr);
+                    throw new Error(`Model load failed: ${mlErr.message || "Unknown ML error"}`);
+                }
 
                 if (!active) return;
                 setIsReady(true);
                 addLog("System: Ready.");
-            } catch (err) {
-                console.error("Init Error:", err);
-                addLog("Error: Initialization failed.");
+            } catch (err: any) {
+                console.error("Initialization Error:", err);
+                addLog(`Error: ${err.message || "Initialization failed"}`);
             }
         }
 
