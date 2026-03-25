@@ -1,7 +1,17 @@
 "use client";
 import React from "react";
+import dynamic from "next/dynamic";
 
-import HandTracking from "@/components/HandTracking";
+const HandTracking = dynamic(() => import("@/components/HandTracking"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex items-center justify-center min-h-screen bg-black">
+      <div className="text-white font-mono text-sm animate-pulse uppercase tracking-[0.3em]">
+        Loading System...
+      </div>
+    </div>
+  ),
+});
 
 export default function Home() {
   return (
