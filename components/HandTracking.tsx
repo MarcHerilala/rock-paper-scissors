@@ -11,7 +11,18 @@ import { drawHands } from "@/lib/utils";
 import Link from "next/link";
 import { useAnimationFrame } from "@/lib/hooks/useAnimationFrame";
 import * as tfjsWasm from "@tensorflow/tfjs-backend-wasm";
-import { detectGesture, GestureType, GESTURE_ICONS } from "@/lib/gestures";
+import { detectGesture, GestureType } from "@/lib/gestures";
+import {
+  Hand,
+  Scissors,
+  CircleDot,
+  HelpCircle,
+  RotateCcw,
+  Play,
+  Trophy,
+  Frown,
+  Minus
+} from "lucide-react";
 
 // Config & Constants
 const GAME_CONFIG = {
@@ -37,6 +48,20 @@ enum GameResult {
 
 // Map TFJS Wasm
 tfjsWasm.setWasmPaths(GAME_CONFIG.TFJS_WASM_PATH);
+
+// Icon mapping component
+const GestureIcon = ({ type, className = "w-12 h-12" }: { type: GestureType, className?: string }) => {
+  switch (type) {
+    case GestureType.ROCK:
+      return <CircleDot className={className} />;
+    case GestureType.PAPER:
+      return <Hand className={className} />;
+    case GestureType.SCISSORS:
+      return <Scissors className={className} />;
+    default:
+      return <HelpCircle className={className} />;
+  }
+};
 
 // Pure helpers
 const getAISelection = (): GestureType => {
@@ -201,24 +226,27 @@ export default function RockPaperScissorsGame() {
         {gameState === GameState.RESULT && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 backdrop-blur-xl p-8 animate-in zoom-in-95 duration-500">
             <div className="flex items-end space-x-12 mb-10">
-              <PlayerChoice label="Toi" icon={GESTURE_ICONS[currentGesture]} />
-              <div className="text-4xl font-black text-white/20 mb-4">VS</div>
-              <PlayerChoice label="AI" icon={GESTURE_ICONS[aiChoice]} animate />
+              <ChoiceDisplay label="Toi" choice={currentGesture} />
+              <div className="text-4xl font-black text-white/20 mb-8 self-center">VS</div>
+              <ChoiceDisplay label="AI" choice={aiChoice} animate />
             </div>
 
-            <h3 className={`text-7xl font-black mb-10 italic uppercase ${resultColorClass}`}>
+            <div className={`flex items-center gap-4 text-7xl font-black mb-10 italic uppercase ${resultColorClass}`}>
+              {gameResult === GameResult.WIN && <Trophy className="w-16 h-16" />}
+              {gameResult === GameResult.LOSS && <Frown className="w-16 h-16" />}
+              {gameResult === GameResult.DRAW && <Minus className="w-16 h-16" />}
               {gameResult === GameResult.WIN ? "Gagné !" :
                 gameResult === GameResult.LOSS ? "Perdu..." : "Égalité"}
-            </h3>
+            </div>
 
-            <PlayButton onClick={startRound} label="REJOUER" />
+            <PlayButton onClick={startRound} label="REJOUER" icon={<RotateCcw className="w-6 h-6" />} />
           </div>
         )}
 
         {/* Live Status Hint */}
         {gameState === GameState.IDLE && (
           <div className="absolute bottom-10 left-1/2 -translate-x-1/2 bg-white/10 backdrop-blur-2xl border border-white/10 px-8 py-3 rounded-full flex items-center space-x-4 shadow-xl">
-            <span className="text-3xl">{GESTURE_ICONS[currentGesture]}</span>
+            <GestureIcon type={currentGesture} className="w-8 h-8 text-blue-400" />
             <span className="text-white font-bold tracking-wide">
               {currentGesture === GestureType.UNKNOWN ? "Prêt ?" : currentGesture}
             </span>
@@ -228,7 +256,7 @@ export default function RockPaperScissorsGame() {
 
       {/* Main Action Call */}
       {gameState === GameState.IDLE && (
-        <PlayButton onClick={startRound} label="Démarrer !" large />
+        <PlayButton onClick={startRound} label="Démarrer !" icon={<Play className="w-8 h-8" />} large />
       )}
 
       {/* System Monitor */}
@@ -259,21 +287,24 @@ const ScoreCard = ({ label, score, color }: { label: string, score: number, colo
   </div>
 );
 
-const PlayerChoice = ({ label, icon, animate }: { label: string, icon: string, animate?: boolean }) => (
+const ChoiceDisplay = ({ label, choice, animate }: { label: string, choice: GestureType, animate?: boolean }) => (
   <div className="flex flex-col items-center group">
-    <span className="text-white/40 text-[10px] font-black uppercase tracking-[0.2em] mb-3">{label}</span>
-    <span className={`text-9xl transition-transform ${animate ? 'animate-bounce' : 'group-hover:scale-110'}`}>{icon}</span>
+    <span className="text-white/40 text-[10px] font-black uppercase tracking-[0.2em] mb-4">{label}</span>
+    <div className={`transition-transform duration-500 ${animate ? 'animate-bounce' : 'group-hover:scale-110'}`}>
+      <GestureIcon type={choice} className="w-32 h-32 text-white" />
+    </div>
   </div>
 );
 
-const PlayButton = ({ onClick, label, large }: { onClick: () => void, label: string, large?: boolean }) => (
+const PlayButton = ({ onClick, label, icon, large }: { onClick: () => void, label: string, icon?: React.ReactNode, large?: boolean }) => (
   <button
     onClick={onClick}
     className={`
-      relative overflow-hidden font-black tracking-widest uppercase italic transition-all transform active:scale-95 shadow-2xl
+      flex items-center gap-4 relative overflow-hidden font-black tracking-widest uppercase italic transition-all transform active:scale-95 shadow-2xl
       ${large ? 'px-20 py-8 bg-blue-600 hover:bg-blue-500 text-3xl rounded-[2.5rem]' : 'px-14 py-4 bg-white text-black text-xl rounded-full hover:scale-110'}
     `}
   >
+    {icon}
     {label}
     <div className="absolute inset-0 bg-gradient-to-tr from-white/20 to-transparent opacity-0 hover:opacity-100 transition-opacity" />
   </button>

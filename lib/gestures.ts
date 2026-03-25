@@ -7,13 +7,6 @@ export enum GestureType {
     UNKNOWN = "Unknown",
 }
 
-export const GESTURE_ICONS: Record<GestureType, string> = {
-    [GestureType.ROCK]: "✊",
-    [GestureType.PAPER]: "🖐️",
-    [GestureType.SCISSORS]: "✌️",
-    [GestureType.UNKNOWN]: "❓",
-};
-
 enum FingerName {
     THUMB = "thumb",
     INDEX = "index_finger",
