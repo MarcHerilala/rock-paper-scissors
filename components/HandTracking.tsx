@@ -123,11 +123,11 @@ export default function RockPaperScissorsGame() {
         <div className="flex flex-col items-center gap-4">
           <PlayButton
             onClick={handleStart}
-            label={isReady ? "Démarrer !" : logs[0]?.includes("❌") ? "Échec - Réessayer" : "Chargement..."}
-            icon={isReady ? <Play className="w-8 h-8" /> : logs[0]?.includes("❌") ? <RotateCcw className="w-8 h-8" /> : null}
+            label={isReady ? "Démarrer !" : logs[0]?.toLowerCase().includes("error") ? "Échec - Réessayer" : "Chargement..."}
+            icon={isReady ? <Play className="w-8 h-8" /> : logs[0]?.toLowerCase().includes("error") ? <RotateCcw className="w-8 h-8" /> : null}
             large
           />
-          {!isReady && !logs[0]?.includes("❌") && (
+          {!isReady && !logs[0]?.toLowerCase().includes("error") && (
             <p className="text-white/20 text-xs animate-pulse">Assurez-vous d&apos;autoriser la caméra</p>
           )}
         </div>

@@ -44,7 +44,7 @@ export function useHandDetector() {
             }
 
             try {
-                addLog("🔄 Caméra : Demande d'accès...");
+                addLog("Camera: Requesting access...");
                 const video = videoRef.current;
 
                 const stream = await navigator.mediaDevices.getUserMedia({
@@ -79,7 +79,7 @@ export function useHandDetector() {
                     canvas.height = video.height;
                 }
 
-                addLog("🔄 ML : Chargement du modèle...");
+                addLog("ML: Loading detection model...");
                 detectorRef.current = await createDetector(SupportedModels.MediaPipeHands, {
                     runtime: "mediapipe",
                     solutionPath: CONFIG.MEDIAPIPE_SOLUTION_PATH
@@ -87,10 +87,10 @@ export function useHandDetector() {
 
                 if (!active) return;
                 setIsReady(true);
-                addLog("✅ Prêt pour le jeu !");
+                addLog("System: Ready.");
             } catch (err) {
                 console.error("Init Error:", err);
-                addLog("❌ Échec initialisation");
+                addLog("Error: Initialization failed.");
             }
         }
 
