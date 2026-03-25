@@ -98,7 +98,9 @@ export function useHandDetector() {
                         addLog("ML: Trying MediaPipe runtime...");
                         detectorRef.current = await createDetector(SupportedModels.MediaPipeHands, {
                             runtime: "mediapipe",
-                            solutionPath: CONFIG.MEDIAPIPE_SOLUTION_PATH
+                            solutionPath: CONFIG.MEDIAPIPE_SOLUTION_PATH,
+                            modelType: "lite", // Use lite model for better performance
+                            maxHands: 1 // Only one hand needed for the game
                         });
                     } catch (mediapipeErr) {
                         console.warn("MediaPipe runtime failed, falling back to tfjs:", mediapipeErr);
@@ -127,24 +129,49 @@ export function useHandDetector() {
         return () => { active = false; };
     }, []);
 
+    const lastGestureRef = useRef<GestureType>(GestureType.UNKNOWN);
+    const isProcessingRef = useRef(false);
+    const frameCountRef = useRef(0);
+
     useAnimationFrame(async () => {
         const video = videoRef.current;
         const canvas = canvasRef.current;
-        if (!detectorRef.current || !video || !canvas) return;
+        if (!detectorRef.current || !video || !canvas || isProcessingRef.current) return;
 
-        const ctx = canvas.getContext("2d");
+        // Draw camera frame every frame for smoothness
+        const ctx = canvas.getContext("2d", { alpha: false }); // Optimization
         if (!ctx) return;
 
-        const hands = await detectorRef.current.estimateHands(video, { flipHorizontal: false });
-
-        ctx.clearRect(0, 0, video.videoWidth, video.videoHeight);
-        ctx.save();
         ctx.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
-        drawHands(hands, ctx);
-        ctx.restore();
 
-        const currentGesture = hands.length > 0 ? detectGesture(hands[0]) : GestureType.UNKNOWN;
-        setGesture(currentGesture);
+        // Run ML detection every 2 frames to save CPU/GPU (approx 30fps detection on 60fps screen)
+        frameCountRef.current++;
+        if (frameCountRef.current % 2 !== 0) return;
+
+        isProcessingRef.current = true;
+        try {
+            const hands = await detectorRef.current.estimateHands(video, { flipHorizontal: false });
+
+            // Clear just the areas where hands are drawn or draw on top if possible
+            // For simplicity, we just draw over the previous frame
+            drawHands(hands, ctx);
+
+            if (hands.length > 0) {
+                const currentGesture = detectGesture(hands[0]);
+                // Only update React state if the gesture changed
+                if (currentGesture !== lastGestureRef.current) {
+                    setGesture(currentGesture);
+                    lastGestureRef.current = currentGesture;
+                }
+            } else if (lastGestureRef.current !== GestureType.UNKNOWN) {
+                setGesture(GestureType.UNKNOWN);
+                lastGestureRef.current = GestureType.UNKNOWN;
+            }
+        } catch (err) {
+            console.error("Detection error:", err);
+        } finally {
+            isProcessingRef.current = false;
+        }
     }, isReady);
 
     return {

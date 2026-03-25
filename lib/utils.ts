@@ -18,17 +18,24 @@ type Hand = {
 };
 
 export const drawHands = (hands: Hand[], ctx: CanvasRenderingContext2D, showNames = false) => {
-    if (hands.length === 0) return;
+    const numHands = hands.length;
+    if (numHands === 0) return;
 
-    hands.sort((hand1, hand2) => (hand1.handedness < hand2.handedness ? 1 : -1));
+    // Only sort if multiple hands are present
+    if (numHands > 1) {
+        hands.sort((hand1, hand2) => (hand1.handedness < hand2.handedness ? 1 : -1));
+    }
 
-    for (let i = 0; i < hands.length; i++) {
-        ctx.fillStyle = hands[i].handedness === "Left" ? "black" : "blue";
-        ctx.strokeStyle = "white";
-        ctx.lineWidth = 2;
+    ctx.strokeStyle = "white";
+    ctx.lineWidth = 2;
 
-        for (let y = 0; y < hands[i].keypoints.length; y++) {
-            const keypoint = hands[i].keypoints[y];
+    for (let i = 0; i < numHands; i++) {
+        const hand = hands[i];
+        ctx.fillStyle = hand.handedness === "Left" ? "black" : "blue";
+
+        // Draw all keypoints in one go for better performance
+        for (let y = 0; y < hand.keypoints.length; y++) {
+            const keypoint = hand.keypoints[y];
             ctx.beginPath();
             ctx.arc(keypoint.x, keypoint.y, 4, 0, 2 * Math.PI);
             ctx.fill();
@@ -38,10 +45,19 @@ export const drawHands = (hands: Hand[], ctx: CanvasRenderingContext2D, showName
             }
         }
 
+        // Draw finger paths
         for (const finger in FINGER_LOOKUP_INDICES) {
-            const points = FINGER_LOOKUP_INDICES[finger as keyof typeof FINGER_LOOKUP_INDICES].map(idx => hands[i].keypoints[idx])
-                .filter((point) => point !== undefined); // Évite les undefined
-            drawPath(points, ctx);
+            const indices = FINGER_LOOKUP_INDICES[finger as keyof typeof FINGER_LOOKUP_INDICES];
+            const region = new Path2D();
+            const startPt = hand.keypoints[indices[0]];
+            if (!startPt) continue;
+
+            region.moveTo(startPt.x, startPt.y);
+            for (let j = 1; j < indices.length; j++) {
+                const pt = hand.keypoints[indices[j]];
+                if (pt) region.lineTo(pt.x, pt.y);
+            }
+            ctx.stroke(region);
         }
     }
 };

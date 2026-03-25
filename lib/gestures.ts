@@ -20,27 +20,37 @@ function getDistance(pt1: Keypoint, pt2: Keypoint): number {
 }
 
 export function detectGesture(hand: Hand): GestureType {
-    if (!hand.keypoints) return GestureType.UNKNOWN;
+    if (!hand.keypoints || hand.keypoints.length === 0) return GestureType.UNKNOWN;
 
     const keypoints = hand.keypoints;
-    const getPt = (name: string) => keypoints.find((pt: Keypoint) => pt.name === name);
+    // Create a map for O(1) lookup
+    const kpMap: Record<string, Keypoint> = {};
+    for (const kp of keypoints) {
+        if (kp.name) kpMap[kp.name] = kp;
+    }
 
-    const wrist = getPt("wrist");
+    const wrist = kpMap["wrist"];
     if (!wrist) return GestureType.UNKNOWN;
 
-    const isFingerOpen = (finger: FingerName): boolean => {
-        const tip = getPt(`${finger}_tip`);
-        const pip = getPt(`${finger}_pip`);
+    const isFingerOpen = (finger: string): boolean => {
+        const tip = kpMap[`${finger}_tip`];
+        const pip = kpMap[`${finger}_pip`];
         if (!tip || !pip) return false;
 
         // Distance-based check for robustness
-        return getDistance(tip, wrist) > getDistance(pip, wrist);
+        // tip to wrist distance > pip to wrist distance
+        const dxTip = tip.x - wrist.x;
+        const dyTip = tip.y - wrist.y;
+        const dxPip = pip.x - wrist.x;
+        const dyPip = pip.y - wrist.y;
+
+        return (dxTip * dxTip + dyTip * dyTip) > (dxPip * dxPip + dyPip * dyPip);
     };
 
-    const indexOpen = isFingerOpen(FingerName.INDEX);
-    const middleOpen = isFingerOpen(FingerName.MIDDLE);
-    const ringOpen = isFingerOpen(FingerName.RING);
-    const pinkyOpen = isFingerOpen(FingerName.PINKY);
+    const indexOpen = isFingerOpen("index_finger");
+    const middleOpen = isFingerOpen("middle_finger");
+    const ringOpen = isFingerOpen("ring_finger");
+    const pinkyOpen = isFingerOpen("pinky_finger");
 
     // Paper: All fingers open
     if (indexOpen && middleOpen && ringOpen && pinkyOpen) {
