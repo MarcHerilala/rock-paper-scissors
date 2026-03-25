@@ -1,4 +1,4 @@
-"use client"; // Important pour Next.js 15
+"use client";
 
 import styles from "/styles/Home.module.css";
 import { useEffect, useRef, useState } from "react";
@@ -12,7 +12,7 @@ import { drawHands } from "@/lib/utils";
 import Link from "next/link";
 import { useAnimationFrame } from "@/lib/hooks/useAnimationFrame";
 import * as tfjsWasm from "@tensorflow/tfjs-backend-wasm";
-import { isHandOpen } from "./IsHAndOpen";
+import { detectGesture, Gesture } from "@/lib/gestures";
 
 // Charger TensorFlow WASM
 tfjsWasm.setWasmPaths("https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm");
@@ -69,46 +69,43 @@ export default function HandPoseDetection() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [ctx, setCtx] = useState<CanvasRenderingContext2D | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
+  const [currentGesture, setCurrentGesture] = useState<Gesture>("Unknown");
 
   useEffect(() => {
     async function initialize() {
       try {
-        setLogs(["🚀 Initialisation en cours..."]); // Réinitialisation des logs
-        
-
+        setLogs(["🚀 Initialisation en cours..."]);
         const video = await setupVideo((msg) => setLogs((prev) => [...prev, msg]));
         videoRef.current = video;
-
         const context = await setupCanvas(video, (msg) => setLogs((prev) => [...prev, msg]));
         setCtx(context);
-
         detectorRef.current = await setupDetector((msg) => setLogs((prev) => [...prev, msg]));
       } catch (error) {
         setLogs((prev) => [...prev, `❌ Erreur: ${error instanceof Error ? error.message : "Une erreur inconnue s'est produite"}`]);
       }
     }
-
     initialize();
   }, []);
 
- useAnimationFrame(async () => {
-  if (!detectorRef.current || !videoRef.current || !ctx) return;
+  useAnimationFrame(async () => {
+    if (!detectorRef.current || !videoRef.current || !ctx) return;
 
-  const hands = await detectorRef.current.estimateHands(videoRef.current, { flipHorizontal: false });
-  ctx.clearRect(0, 0, videoRef.current.videoWidth, videoRef.current.videoHeight);
-  ctx.drawImage(videoRef.current, 0, 0, videoRef.current.videoWidth, videoRef.current.videoHeight);
-  drawHands(hands, ctx);
+    const hands = await detectorRef.current.estimateHands(videoRef.current, { flipHorizontal: false });
+    ctx.clearRect(0, 0, videoRef.current.videoWidth, videoRef.current.videoHeight);
+    ctx.drawImage(videoRef.current, 0, 0, videoRef.current.videoWidth, videoRef.current.videoHeight);
+    drawHands(hands, ctx);
 
-  hands.forEach((hand) => {
-    if (isHandOpen(hand)) {
-      setLogs((prev) => [...prev, "🖐️ Main ouverte détectée !"]);
-      console.log("🖐️ Main ouverte détectée !");
-    } else {
-      console.log("✊ Poing détecté !");
-      setLogs((prev) => [...prev, "✊ Poing détecté !"]);
+    if (hands.length > 0) {
+      const gesture = detectGesture(hands[0]);
+      if (gesture !== currentGesture) {
+        setCurrentGesture(gesture);
+        const icon = gesture === "Rock" ? "✊" : gesture === "Paper" ? "🖐️" : gesture === "Scissors" ? "✌️" : "❓";
+        setLogs((prev) => [`Mode: ${gesture} ${icon}`, ...prev.slice(0, 5)]);
+      }
+    } else if (currentGesture !== "Unknown") {
+      setCurrentGesture("Unknown");
     }
-  });
-}, !!(detectorRef.current && videoRef.current && ctx));
+  }, !!(detectorRef.current && videoRef.current && ctx));
 
   return (
     <div className={styles.container}>
@@ -120,6 +117,12 @@ export default function HandPoseDetection() {
           / Hand Pose Detection 👋
         </h2>
         <code style={{ marginBottom: "1rem" }}>Work in progress...</code>
+
+        {/* Affichage du geste actuel en gros */}
+        <div style={{ fontSize: "5rem", marginBottom: "1rem" }}>
+          {currentGesture === "Rock" ? "✊" : currentGesture === "Paper" ? "🖐️" : currentGesture === "Scissors" ? "✌️" : "❓"}
+        </div>
+
         <canvas
           style={{
             transform: "scaleX(-1)",
@@ -144,7 +147,6 @@ export default function HandPoseDetection() {
           playsInline
         ></video>
 
-        {/* Section affichage des logs */}
         <pre
           style={{
             marginTop: "1rem",
@@ -163,4 +165,3 @@ export default function HandPoseDetection() {
     </div>
   );
 }
-
