@@ -33,24 +33,34 @@ export function detectGesture(hand: Hand): GestureType {
     if (!wrist) return GestureType.UNKNOWN;
 
     const isFingerOpen = (finger: string): boolean => {
-        const tip = kpMap[`${finger}_tip`];
+        const mcp = kpMap[`${finger}_mcp`];
         const pip = kpMap[`${finger}_pip`];
-        if (!tip || !pip) return false;
+        const tip = kpMap[`${finger}_tip`];
+        if (!mcp || !pip || !tip) return false;
 
-        // Distance-based check for robustness
-        // tip to wrist distance > pip to wrist distance
-        const dxTip = tip.x - wrist.x;
-        const dyTip = tip.y - wrist.y;
-        const dxPip = pip.x - wrist.x;
-        const dyPip = pip.y - wrist.y;
+        // Use the base of the finger (MCP) as the origin for distance checks
+        // An open finger has the tip significantly further from the base than the PIP joint
+        const dxTip = tip.x - mcp.x;
+        const dyTip = tip.y - mcp.y;
+        const dzTip = (tip as any).z - (mcp as any).z || 0;
 
-        return (dxTip * dxTip + dyTip * dyTip) > (dxPip * dxPip + dyPip * dyPip);
+        const dxPip = pip.x - mcp.x;
+        const dyPip = pip.y - mcp.y;
+        const dzPip = (pip as any).z - (mcp as any).z || 0;
+
+        const distSqTip = dxTip * dxTip + dyTip * dyTip + dzTip * dzTip;
+        const distSqPip = dxPip * dxPip + dyPip * dyPip + dzPip * dzPip;
+
+        // A finger is considered open if the tip is further than the PIP.
+        // We use a small buffer (1.2 multiplier) to avoid false positives for folded fingers
+        // when viewed from the front.
+        return distSqTip > distSqPip * 1.2;
     };
 
-    const indexOpen = isFingerOpen("index_finger");
-    const middleOpen = isFingerOpen("middle_finger");
-    const ringOpen = isFingerOpen("ring_finger");
-    const pinkyOpen = isFingerOpen("pinky_finger");
+    const indexOpen = isFingerOpen(FingerName.INDEX);
+    const middleOpen = isFingerOpen(FingerName.MIDDLE);
+    const ringOpen = isFingerOpen(FingerName.RING);
+    const pinkyOpen = isFingerOpen(FingerName.PINKY);
 
     // Paper: All fingers open
     if (indexOpen && middleOpen && ringOpen && pinkyOpen) {
