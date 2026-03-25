@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback } from "react";
 import { GestureType } from "@/lib/gestures";
 
 export enum GameState {

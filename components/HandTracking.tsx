@@ -128,7 +128,7 @@ export default function RockPaperScissorsGame() {
             large
           />
           {!isReady && !logs[0]?.includes("❌") && (
-            <p className="text-white/20 text-xs animate-pulse">Assurez-vous d'autoriser la caméra</p>
+            <p className="text-white/20 text-xs animate-pulse">Assurez-vous d&apos;autoriser la caméra</p>
           )}
         </div>
       )}
