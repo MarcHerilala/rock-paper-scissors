@@ -37,31 +37,40 @@ export function detectGesture(hand: Hand): GestureType {
         const tip = kpMap[`${finger}_tip`];
         if (!mcp || !tip || !wrist) return false;
 
-        // Hand direction vector (Wrist to MCP)
-        const hx = mcp.x - wrist.x;
-        const hy = mcp.y - wrist.y;
-        const hz = (mcp as any).z - (wrist as any).z || 0;
+        // Simple and robust: A finger is open if the tip is significantly further 
+        // from the wrist than the base of the finger (MCP).
+        const dxTip = tip.x - wrist.x;
+        const dyTip = tip.y - wrist.y;
+        const dzTip = (tip as any).z - (wrist as any).z || 0;
 
-        // Finger direction vector (MCP to Tip)
-        const fx = tip.x - mcp.x;
-        const fy = tip.y - mcp.y;
-        const fz = (tip as any).z - (mcp as any).z || 0;
+        const dxMcp = mcp.x - wrist.x;
+        const dyMcp = mcp.y - wrist.y;
+        const dzMcp = (mcp as any).z - (wrist as any).z || 0;
 
-        // Dot product to check if finger is pointing in the same direction as the hand
-        const dotProduct = hx * fx + hy * fy + hz * fz;
+        const distSqTip = dxTip * dxTip + dyTip * dyTip + dzTip * dzTip;
+        const distSqMcp = dxMcp * dxMcp + dyMcp * dyMcp + dzMcp * dzMcp;
 
-        // Normalize by MCP-Wrist length squared to get a relative scale
-        const hMagSq = hx * hx + hy * hy + hz * hz;
-
-        // A value > 0.05 means the finger is extended away from the palm
-        // We use a lower threshold to be more permissive for various hand angles
-        return dotProduct > hMagSq * 0.05;
+        // A finger is open if it extends beyond the palm
+        return distSqTip > distSqMcp * 1.3;
     };
 
-    const indexOpen = isFingerOpen(FingerName.INDEX);
-    const middleOpen = isFingerOpen(FingerName.MIDDLE);
-    const ringOpen = isFingerOpen(FingerName.RING);
-    const pinkyOpen = isFingerOpen(FingerName.PINKY);
+    const isThumbOpen = (): boolean => {
+        const tip = kpMap["thumb_tip"];
+        const ip = kpMap["thumb_ip"];
+        const mcp = kpMap["thumb_mcp"];
+        if (!tip || !ip || !mcp) return false;
+
+        // Thumb is open if tip is further from the wrist than the IP joint
+        const distTip = getDistance(tip, wrist);
+        const distIp = getDistance(ip, wrist);
+        return distTip > distIp * 1.1;
+    };
+
+    const indexOpen = isFingerOpen("index_finger");
+    const middleOpen = isFingerOpen("middle_finger");
+    const ringOpen = isFingerOpen("ring_finger");
+    const pinkyOpen = isFingerOpen("pinky_finger");
+    const thumbOpen = isThumbOpen();
 
     // Paper: All fingers open
     if (indexOpen && middleOpen && ringOpen && pinkyOpen) {
@@ -73,7 +82,7 @@ export function detectGesture(hand: Hand): GestureType {
         return GestureType.SCISSORS;
     }
 
-    // Rock: All fingers closed
+    // Rock: All main fingers closed
     if (!indexOpen && !middleOpen && !ringOpen && !pinkyOpen) {
         return GestureType.ROCK;
     }

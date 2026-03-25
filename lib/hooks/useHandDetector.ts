@@ -50,7 +50,7 @@ export function useHandDetector() {
                 if (!video) throw new Error("Video ref not found");
 
                 const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { width: { ideal: 480 }, height: { ideal: 360 } } // Balanced resolution
+                    video: { width: { ideal: 640 }, height: { ideal: 480 } } // Full resolution for maximum accuracy
                 });
 
                 if (!active) {
@@ -84,8 +84,8 @@ export function useHandDetector() {
 
                 if (!active) return;
 
-                video.width = video.videoWidth || 480;
-                video.height = video.videoHeight || 360;
+                video.width = video.videoWidth || 640;
+                video.height = video.videoHeight || 480;
 
                 const canvas = canvasRef.current;
                 if (canvas) {
