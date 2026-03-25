@@ -34,27 +34,28 @@ export function detectGesture(hand: Hand): GestureType {
 
     const isFingerOpen = (finger: string): boolean => {
         const mcp = kpMap[`${finger}_mcp`];
-        const pip = kpMap[`${finger}_pip`];
         const tip = kpMap[`${finger}_tip`];
-        if (!mcp || !pip || !tip) return false;
+        if (!mcp || !tip || !wrist) return false;
 
-        // Use the base of the finger (MCP) as the origin for distance checks
-        // An open finger has the tip significantly further from the base than the PIP joint
-        const dxTip = tip.x - mcp.x;
-        const dyTip = tip.y - mcp.y;
-        const dzTip = (tip as any).z - (mcp as any).z || 0;
+        // Hand direction vector (Wrist to MCP)
+        const hx = mcp.x - wrist.x;
+        const hy = mcp.y - wrist.y;
+        const hz = (mcp as any).z - (wrist as any).z || 0;
 
-        const dxPip = pip.x - mcp.x;
-        const dyPip = pip.y - mcp.y;
-        const dzPip = (pip as any).z - (mcp as any).z || 0;
+        // Finger direction vector (MCP to Tip)
+        const fx = tip.x - mcp.x;
+        const fy = tip.y - mcp.y;
+        const fz = (tip as any).z - (mcp as any).z || 0;
 
-        const distSqTip = dxTip * dxTip + dyTip * dyTip + dzTip * dzTip;
-        const distSqPip = dxPip * dxPip + dyPip * dyPip + dzPip * dzPip;
+        // Dot product to check if finger is pointing in the same direction as the hand
+        const dotProduct = hx * fx + hy * fy + hz * fz;
 
-        // A finger is considered open if the tip is further than the PIP.
-        // We use a small buffer (1.2 multiplier) to avoid false positives for folded fingers
-        // when viewed from the front.
-        return distSqTip > distSqPip * 1.2;
+        // Normalize by MCP-Wrist length squared to get a relative scale
+        const hMagSq = hx * hx + hy * hy + hz * hz;
+
+        // A value > 0.05 means the finger is extended away from the palm
+        // We use a lower threshold to be more permissive for various hand angles
+        return dotProduct > hMagSq * 0.05;
     };
 
     const indexOpen = isFingerOpen(FingerName.INDEX);
