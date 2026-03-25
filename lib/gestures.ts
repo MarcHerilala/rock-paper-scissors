@@ -1,48 +1,61 @@
 import { Hand, Keypoint } from "@tensorflow-models/hand-pose-detection";
 
-export type Gesture = "Rock" | "Paper" | "Scissors" | "Unknown";
+export enum GestureType {
+    ROCK = "Rock",
+    PAPER = "Paper",
+    SCISSORS = "Scissors",
+    UNKNOWN = "Unknown",
+}
 
-export function detectGesture(hand: Hand): Gesture {
-    if (!hand.keypoints) return "Unknown";
+enum FingerName {
+    THUMB = "thumb",
+    INDEX = "index_finger",
+    MIDDLE = "middle_finger",
+    RING = "ring_finger",
+    PINKY = "pinky_finger",
+}
+
+function getDistance(pt1: Keypoint, pt2: Keypoint): number {
+    return Math.sqrt(Math.pow(pt1.x - pt2.x, 2) + Math.pow(pt1.y - pt2.y, 2));
+}
+
+export function detectGesture(hand: Hand): GestureType {
+    if (!hand.keypoints) return GestureType.UNKNOWN;
 
     const keypoints = hand.keypoints;
-
-    // Helper function to get a keypoint by name
     const getPt = (name: string) => keypoints.find((pt: any) => pt.name === name);
 
-    const thumbTip = getPt("thumb_tip");
-    const indexTip = getPt("index_finger_tip");
-    const indexPip = getPt("index_finger_pip");
-    const middleTip = getPt("middle_finger_tip");
-    const middlePip = getPt("middle_finger_pip");
-    const ringTip = getPt("ring_finger_tip");
-    const ringPip = getPt("ring_finger_pip");
-    const pinkyTip = getPt("pinky_finger_tip");
-    const pinkyPip = getPt("pinky_finger_pip");
+    const wrist = getPt("wrist");
+    if (!wrist) return GestureType.UNKNOWN;
 
-    if (!indexTip || !indexPip || !middleTip || !middlePip || !ringTip || !ringPip || !pinkyTip || !pinkyPip) {
-        return "Unknown";
-    }
+    const isFingerOpen = (finger: FingerName): boolean => {
+        const tip = getPt(`${finger}_tip`);
+        const pip = getPt(`${finger}_pip`);
+        if (!tip || !pip) return false;
 
-    const isIndexOpen = indexTip.y < indexPip.y;
-    const isMiddleOpen = middleTip.y < middlePip.y;
-    const isRingOpen = ringTip.y < ringPip.y;
-    const isPinkyOpen = pinkyTip.y < pinkyPip.y;
+        // Distance-based check for robustness
+        return getDistance(tip, wrist) > getDistance(pip, wrist);
+    };
 
-    // Paper: All 4 main fingers open
-    if (isIndexOpen && isMiddleOpen && isRingOpen && isPinkyOpen) {
-        return "Paper";
+    const indexOpen = isFingerOpen(FingerName.INDEX);
+    const middleOpen = isFingerOpen(FingerName.MIDDLE);
+    const ringOpen = isFingerOpen(FingerName.RING);
+    const pinkyOpen = isFingerOpen(FingerName.PINKY);
+
+    // Paper: All fingers open
+    if (indexOpen && middleOpen && ringOpen && pinkyOpen) {
+        return GestureType.PAPER;
     }
 
     // Scissors: Index and Middle open, Ring and Pinky closed
-    if (isIndexOpen && isMiddleOpen && !isRingOpen && !isPinkyOpen) {
-        return "Scissors";
+    if (indexOpen && middleOpen && !ringOpen && !pinkyOpen) {
+        return GestureType.SCISSORS;
     }
 
-    // Rock: All 4 main fingers closed
-    if (!isIndexOpen && !isMiddleOpen && !isRingOpen && !isPinkyOpen) {
-        return "Rock";
+    // Rock: All fingers closed
+    if (!indexOpen && !middleOpen && !ringOpen && !pinkyOpen) {
+        return GestureType.ROCK;
     }
 
-    return "Unknown";
+    return GestureType.UNKNOWN;
 }
