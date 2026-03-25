@@ -23,7 +23,7 @@ export function detectGesture(hand: Hand): GestureType {
     if (!hand.keypoints) return GestureType.UNKNOWN;
 
     const keypoints = hand.keypoints;
-    const getPt = (name: string) => keypoints.find((pt: any) => pt.name === name);
+    const getPt = (name: string) => keypoints.find((pt: Keypoint) => pt.name === name);
 
     const wrist = getPt("wrist");
     if (!wrist) return GestureType.UNKNOWN;
